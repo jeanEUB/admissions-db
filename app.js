@@ -10,8 +10,8 @@ const THEME_CLASSES = ['light-theme', 'dark-theme'];
 const AUTH_CONFIG = window.AUTH_CONFIG || {
     clientId: '',
     tenantId: 'common',
-    redirectUri: window.location.origin + window.location.pathname,
-    postLogoutRedirectUri: window.location.origin + window.location.pathname,
+    redirectUri: new URL('index.html', window.location.href).toString(),
+    postLogoutRedirectUri: new URL('index.html', window.location.href).toString(),
     cacheLocation: 'localStorage',
     appPageUrl: new URL('admissions_db.html', window.location.href).toString(),
     loginPageUrl: new URL('index.html', window.location.href).toString()

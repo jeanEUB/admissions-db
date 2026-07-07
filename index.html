@@ -11,12 +11,45 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Microsoft Authentication Library -->
+    <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js" crossorigin="anonymous"></script>
     <!-- Style Sheet -->
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark-theme">
+<body class="light-theme">
+    <!-- Microsoft 365 Login Screen -->
+    <section id="authScreen" class="auth-screen" aria-labelledby="authTitle">
+        <div class="auth-card">
+            <div class="auth-branding">
+                <div class="auth-logo">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div>
+                    <p class="auth-eyebrow">Euro University of Bahrain</p>
+                    <h1 id="authTitle">Admissions Pipeline Database</h1>
+                </div>
+            </div>
+
+            <p class="auth-copy">
+                Sign in with your Microsoft 365 work account to access applicant records, pipeline updates, and audit logs.
+            </p>
+
+            <div class="auth-actions">
+                <button id="microsoftLoginBtn" class="btn btn-primary auth-button" type="button">
+                    <i class="fa-brands fa-microsoft"></i>
+                    Sign in with Microsoft 365
+                </button>
+                <p id="authStatusText" class="auth-status">Waiting for Microsoft sign-in.</p>
+            </div>
+
+            <div class="auth-note">
+                <strong>Setup required:</strong> configure your Microsoft Entra tenant, application (client) ID, and redirect URI in <span>app.js</span>.
+            </div>
+        </div>
+    </section>
+
     <!-- Main Grid Layout -->
-    <div class="app-container">
+    <div id="appShell" class="app-container app-hidden" aria-hidden="true">
         
         <!-- Header -->
         <header class="app-header">
@@ -40,6 +73,9 @@
                 <button id="themeToggleBtn" class="btn btn-icon" title="Toggle Light/Dark Theme">
                     <i class="fa-solid fa-sun icon-sun"></i>
                     <i class="fa-solid fa-moon icon-moon"></i>
+                </button>
+                <button id="signOutBtn" class="btn btn-secondary" title="Sign out of Microsoft 365">
+                    <i class="fa-solid fa-right-from-bracket"></i> Sign Out
                 </button>
             </div>
         </header>
@@ -312,6 +348,7 @@
     </div>
 
     <!-- Data and Application Script Files -->
+    <script src="auth-config.js"></script>
     <script src="admissions_data.js"></script>
     <script src="app.js"></script>
 </body>

@@ -22,7 +22,7 @@
     --stage-registration: hsl(310, 50%, 55%);
     --stage-audit: hsl(0, 0%, 55%);
 
-    /* Dark Mode Defaults */
+    /* Theme Defaults */
     --bg-app: hsl(222, 25%, 10%);
     --bg-card: hsl(222, 20%, 15%);
     --bg-input: hsl(222, 20%, 12%);
@@ -83,6 +83,119 @@ body {
     line-height: 1.5;
     transition: background-color 0.3s ease, color 0.3s ease;
     overflow-x: hidden;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
+body.auth-only {
+    overflow: hidden;
+}
+
+.app-hidden {
+    display: none !important;
+}
+
+/* Microsoft 365 Login Screen */
+.auth-screen {
+    min-height: 100vh;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.16), transparent 28%),
+        linear-gradient(160deg, var(--bg-app), var(--bg-header));
+}
+
+.auth-screen.visible {
+    display: flex;
+}
+
+.auth-card {
+    width: min(520px, 100%);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    box-shadow: var(--shadow-lg);
+    padding: 2rem;
+}
+
+.auth-branding {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.auth-logo {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--color-primary), var(--stage-verification));
+    color: #fff;
+    font-size: 1.35rem;
+    flex: 0 0 auto;
+}
+
+.auth-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.auth-card h1 {
+    font-size: 1.6rem;
+    line-height: 1.1;
+}
+
+.auth-copy {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+}
+
+.auth-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.auth-button {
+    width: 100%;
+    min-height: 3rem;
+    font-size: 0.95rem;
+}
+
+.auth-status {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.auth-note {
+    margin-top: 1.25rem;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.15);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.auth-note span {
+    font-family: var(--font-body);
+    font-weight: 700;
+}
+
+.auth-note strong {
+    color: var(--text-primary);
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -213,12 +326,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Toggle Sun/Moon details */
-.app-header .icon-sun,
-.light-theme .icon-moon {
+.app-header .icon-moon,
+.light-theme .icon-sun {
     display: none;
 }
-.light-theme .icon-sun,
-.app-header .icon-moon {
+.light-theme .icon-moon,
+.app-header .icon-sun {
     display: block;
 }
 
@@ -621,26 +734,29 @@ tbody td {
     font-size: 0.75rem;
 }
 
-/* Detail Drawer CSS (Premium Glassmorphic Slide-out) */
+/* Detail Drawer CSS (Centered Modal) */
 .detail-drawer {
     position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    inset: 0;
     z-index: 1000;
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
     visibility: hidden;
-    transition: visibility 0.3s;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 .detail-drawer.open {
     visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .drawer-backdrop {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
@@ -657,21 +773,26 @@ tbody td {
 
 .drawer-content {
     position: relative;
-    width: 100%;
-    max-width: 650px;
-    height: 100%;
+    width: 75vw;
+    height: 75vh;
+    max-width: 75vw;
+    max-height: 75vh;
     background-color: var(--bg-card);
-    border-left: 1px solid var(--border-color);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
     box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+    transform: translateY(24px) scale(0.98);
+    opacity: 0;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
     z-index: 2;
 }
 
 .detail-drawer.open .drawer-content {
-    transform: translateX(0);
+    transform: translateY(0) scale(1);
+    opacity: 1;
 }
 
 .drawer-header {
@@ -889,6 +1010,39 @@ tbody td {
     gap: 0.75rem;
 }
 
+@media (max-width: 900px) {
+    .detail-drawer {
+        padding: 0.75rem;
+    }
+
+    .drawer-content {
+        width: 100%;
+        height: auto;
+        max-width: 100%;
+        max-height: calc(100vh - 1.5rem);
+        border-radius: 16px;
+    }
+}
+
+@media (max-width: 640px) {
+    .drawer-header,
+    .drawer-form-scroll,
+    .drawer-actions {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .drawer-actions {
+        flex-direction: column;
+    }
+
+    .drawer-actions .btn,
+    .drawer-actions .btn-danger {
+        flex: 1 1 auto;
+        width: 100%;
+    }
+}
+
 .drawer-actions .btn {
     flex: 1;
 }
@@ -897,6 +1051,25 @@ tbody td {
     flex: 0 0 60px;
     padding: 0;
     width: 60px;
+}
+
+@media (max-width: 640px) {
+    .auth-card {
+        padding: 1.25rem;
+        border-radius: 18px;
+    }
+
+    .auth-branding {
+        align-items: flex-start;
+    }
+
+    .auth-card h1 {
+        font-size: 1.35rem;
+    }
+
+    .auth-copy {
+        font-size: 0.9rem;
+    }
 }
 
 /* Fade in animations */

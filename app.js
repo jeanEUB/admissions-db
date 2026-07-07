@@ -3,6 +3,32 @@
 // Constants
 const LOCAL_STORAGE_KEY = 'eub_admissions_records';
 const THEME_STORAGE_KEY = 'eub_admissions_theme';
+const AUTH_STORAGE_KEY = 'eub_admissions_m365_account';
+const LOGIN_SCOPES = ['openid', 'profile', 'email'];
+
+const AUTH_CONFIG = window.AUTH_CONFIG || {
+    clientId: '',
+    tenantId: 'common',
+    redirectUri: window.location.origin + window.location.pathname,
+    postLogoutRedirectUri: window.location.origin + window.location.pathname,
+    cacheLocation: 'localStorage'
+};
+
+const msalConfig = {
+    auth: {
+        clientId: AUTH_CONFIG.clientId,
+        authority: `https://login.microsoftonline.com/${AUTH_CONFIG.tenantId || 'common'}`,
+        redirectUri: AUTH_CONFIG.redirectUri,
+        postLogoutRedirectUri: AUTH_CONFIG.postLogoutRedirectUri,
+        navigateToLoginRequestUrl: false
+    },
+    cache: {
+        cacheLocation: AUTH_CONFIG.cacheLocation || 'localStorage',
+        storeAuthStateInCookie: false
+    }
+};
+
+let msalInstance = null;
 
 // Application State
 let state = {
@@ -13,7 +39,7 @@ let state = {
     sortColumn: 'App Serial No.',
     sortOrder: 'desc', // desc to show newest Serial Numbers first
     currentRecordId: null, // Holds the Serial No of editing record, null for new record
-    theme: 'dark-theme'
+    theme: 'light-theme'
 };
 
 // Section mapping from metadata groups to HTML element IDs
@@ -30,19 +56,149 @@ const SECTION_MAPPING = {
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    initializeAuthFlow();
+});
+
+function initializeAuthFlow() {
     loadTheme();
+
+    if (!window.msal || !AUTH_CONFIG.clientId) {
+        showAuthSetupMessage();
+        return;
+    }
+
+    msalInstance = new msal.PublicClientApplication(msalConfig);
+    handleAuthRedirect();
+    bindAuthButtons();
+}
+
+async function handleAuthRedirect() {
+    try {
+        const response = await msalInstance.handleRedirectPromise();
+        if (response && response.account) {
+            msalInstance.setActiveAccount(response.account);
+            finalizeSignIn(response.account);
+            return;
+        }
+
+        const activeAccount = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+        if (activeAccount) {
+            msalInstance.setActiveAccount(activeAccount);
+            finalizeSignIn(activeAccount);
+            return;
+        }
+
+        showAuthScreen();
+    } catch (error) {
+        console.error('Microsoft sign-in initialization failed', error);
+        showAuthError('Microsoft sign-in could not be initialized. Check the tenant and client ID configuration.');
+    }
+}
+
+function bindAuthButtons() {
+    const loginButton = document.getElementById('microsoftLoginBtn');
+    if (loginButton) {
+        loginButton.addEventListener('click', signInWithMicrosoft);
+    }
+
+    const signOutButton = document.getElementById('signOutBtn');
+    if (signOutButton) {
+        signOutButton.addEventListener('click', signOutWithMicrosoft);
+    }
+}
+
+function showAuthScreen() {
+    document.getElementById('authScreen').classList.add('visible');
+    document.getElementById('appShell').classList.add('app-hidden');
+    document.getElementById('appShell').setAttribute('aria-hidden', 'true');
+    document.body.classList.add('auth-only');
+}
+
+function showAuthSetupMessage() {
+    showAuthScreen();
+    const status = document.getElementById('authStatusText');
+    if (status) {
+        status.textContent = 'Microsoft sign-in is not configured yet. Add your Entra app settings in auth-config.js.';
+    }
+    const loginButton = document.getElementById('microsoftLoginBtn');
+    if (loginButton) {
+        loginButton.disabled = true;
+    }
+}
+
+function showAuthError(message) {
+    showAuthScreen();
+    const status = document.getElementById('authStatusText');
+    if (status) {
+        status.textContent = message;
+    }
+}
+
+function finalizeSignIn(account) {
+    document.getElementById('authScreen').classList.remove('visible');
+    document.getElementById('appShell').classList.remove('app-hidden');
+    document.getElementById('appShell').setAttribute('aria-hidden', 'false');
+    document.body.classList.remove('auth-only');
+
+    const status = document.getElementById('authStatusText');
+    if (status) {
+        status.textContent = `Signed in as ${account.name || account.username || 'Microsoft user'}.`;
+    }
+
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+        name: account.name || '',
+        username: account.username || '',
+        homeAccountId: account.homeAccountId || ''
+    }));
+
     loadRecords();
     initFilterDropdowns();
     renderFormFields();
     setupEventListeners();
     updateUI();
-});
+}
+
+async function signInWithMicrosoft() {
+    if (!msalInstance) return;
+
+    const status = document.getElementById('authStatusText');
+    if (status) {
+        status.textContent = 'Opening Microsoft sign-in...';
+    }
+
+    try {
+        await msalInstance.loginRedirect({
+            scopes: LOGIN_SCOPES,
+            prompt: 'select_account'
+        });
+    } catch (error) {
+        console.error('Microsoft sign-in failed', error);
+        showAuthError('Microsoft sign-in failed. Verify the Entra app registration and redirect URI.');
+    }
+}
+
+async function signOutWithMicrosoft() {
+    if (!msalInstance) return;
+
+    try {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        await msalInstance.logoutRedirect({
+            account: msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0]
+        });
+    } catch (error) {
+        console.error('Microsoft sign-out failed', error);
+        showAuthError('Sign-out failed. Please refresh and try again.');
+    }
+}
 
 // Load theme from localStorage
 function loadTheme() {
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'dark-theme';
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light-theme';
     state.theme = savedTheme;
     document.body.className = savedTheme;
+    if (!localStorage.getItem(THEME_STORAGE_KEY)) {
+        localStorage.setItem(THEME_STORAGE_KEY, savedTheme);
+    }
 }
 
 // Toggle Theme between dark and light
@@ -521,8 +677,9 @@ function openRecord(serialNo) {
     // Show delete button
     document.getElementById('deleteRecordBtn').style.display = 'block';
 
-    // Slide in
+    // Open centered modal
     document.getElementById('detailDrawer').classList.add('open');
+    document.body.classList.add('modal-open');
 }
 
 // Initialize blank form for adding a new record
@@ -573,8 +730,9 @@ function openNewRecord() {
     // Hide delete button for new profiles
     document.getElementById('deleteRecordBtn').style.display = 'none';
 
-    // Slide in
+    // Open centered modal
     document.getElementById('detailDrawer').classList.add('open');
+    document.body.classList.add('modal-open');
 }
 
 // Switch tabs within the editing drawer
@@ -719,6 +877,7 @@ function deleteRecord() {
 // Close detailing drawer
 function closeDrawer() {
     document.getElementById('detailDrawer').classList.remove('open');
+    document.body.classList.remove('modal-open');
     state.currentRecordId = null;
 }
 

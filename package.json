@@ -1,0 +1,10 @@
+{
+  "name": "admissions-db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static admissions dashboard hosted from Git",
+  "scripts": {
+    "build": "echo Static site - no build step required",
+    "start": "echo Static site"
+  }
+}

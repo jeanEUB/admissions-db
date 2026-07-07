@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="EUB Admissions Pipeline Database. Manage student applications, contact verifications, offer readiness, decisions, funding, registration and auditing details.">
+    <title>Admissions Pipeline Database - Euro University of Bahrain</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://alcdn.msauth.net/browser/2.38.2/js/msal-browser.min.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="light-theme" data-page="app">
+    <div id="appShell" class="app-container" aria-hidden="false">
+        <header class="app-header">
+            <div class="header-logo">
+                <i class="fa-solid fa-graduation-cap logo-icon"></i>
+                <div class="logo-text">
+                    <h1>EUB Admissions</h1>
+                    <span class="logo-tagline">Pipeline Database v0.3</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="addApplicantBtn" class="btn btn-primary" title="Add New Applicant">
+                    <i class="fa-solid fa-user-plus"></i> New Applicant
+                </button>
+                <button id="exportJsonBtn" class="btn btn-secondary" title="Export database to JSON file">
+                    <i class="fa-solid fa-download"></i> Export JSON
+                </button>
+                <button id="resetDataBtn" class="btn btn-danger" title="Reset to original spreadsheet records">
+                    <i class="fa-solid fa-rotate-left"></i> Reset Seed
+                </button>
+                <button id="themeToggleBtn" class="btn btn-icon" title="Toggle Light/Dark Theme">
+                    <i class="fa-solid fa-sun icon-sun"></i>
+                    <i class="fa-solid fa-moon icon-moon"></i>
+                </button>
+                <button id="signOutBtn" class="btn btn-secondary" title="Sign out of Microsoft 365">
+                    <i class="fa-solid fa-right-from-bracket"></i> Sign Out
+                </button>
+            </div>
+        </header>
+
+        <section class="dashboard-section">
+            <div class="dashboard-grid">
+                <div class="kpi-card kpi-total">
+                    <div class="kpi-icon-wrapper">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <span class="kpi-label">Total Applicants</span>
+                        <h3 id="kpiTotalCount">168</h3>
+                        <span class="kpi-detail">Active Pipeline</span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-verified">
+                    <div class="kpi-icon-wrapper">
+                        <i class="fa-solid fa-user-check"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <span class="kpi-label">Verified Gate Pass</span>
+                        <h3 id="kpiVerifiedCount">0</h3>
+                        <span id="kpiVerifiedPercent" class="kpi-detail">0% Verified</span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-offers">
+                    <div class="kpi-icon-wrapper">
+                        <i class="fa-solid fa-envelope-open-text"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <span class="kpi-label">Offers Issued</span>
+                        <h3 id="kpiOffersCount">0</h3>
+                        <span id="kpiOffersPercent" class="kpi-detail">0% of Active</span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-registered">
+                    <div class="kpi-icon-wrapper">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                    <div class="kpi-info">
+                        <span class="kpi-label">Registered Students</span>
+                        <h3 id="kpiRegisteredCount">0</h3>
+                        <span id="kpiRegistrationPercent" class="kpi-detail">0% Conversion</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-card">
+                    <h4 class="chart-title"><i class="fa-solid fa-chart-bar"></i> Pipeline Stages Volume</h4>
+                    <div class="chart-container" id="pipelineStageChart"></div>
+                </div>
+                <div class="chart-card">
+                    <h4 class="chart-title"><i class="fa-solid fa-user-tie"></i> Advisor Record Allocation</h4>
+                    <div class="chart-container" id="advisorWorkloadChart"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="controls-section">
+            <div class="search-bar">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="searchInput" placeholder="Search by name, serial no., nationality, email or advisor..." aria-label="Search applicants">
+            </div>
+
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label for="filterStage">Pipeline Stage</label>
+                    <select id="filterStage">
+                        <option value="">All Stages</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterAdvisor">Advisor</label>
+                    <select id="filterAdvisor">
+                        <option value="">All Advisors</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterOffer">Offer Status</label>
+                    <select id="filterOffer">
+                        <option value="">All Offers</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterVerification">Verification Blocker</label>
+                    <select id="filterVerification">
+                        <option value="">All Records</option>
+                        <option value="Blocked">Blocked</option>
+                        <option value="Unblocked">Clear to Offer</option>
+                    </select>
+                </div>
+                <button id="clearFiltersBtn" class="btn btn-text" title="Clear all filters">
+                    <i class="fa-solid fa-filter-circle-xmark"></i> Clear Filters
+                </button>
+            </div>
+        </section>
+
+        <main class="grid-main-section">
+            <div class="table-card">
+                <div class="table-container">
+                    <table id="applicantsTable">
+                        <thead>
+                            <tr class="stage-headers-row">
+                                <th colspan="3" class="stage-header-group group-applicant">Applicant & Source</th>
+                                <th colspan="2" class="stage-header-group group-verification">Contact Verification</th>
+                                <th colspan="2" class="stage-header-group group-readiness">Offer Readiness</th>
+                                <th colspan="2" class="stage-header-group group-decision">Offer Decision</th>
+                                <th colspan="2" class="stage-header-group group-registration">Registration & Audit</th>
+                            </tr>
+                            <tr class="field-headers-row">
+                                <th data-sort="App Serial No.">Serial No <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="First Name">Applicant Name <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Application Date">App Date <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Mobile Verification Status">Mobile Verif <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Email Verification Status">Email Verif <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Programme Name">Programme <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Academic Status">Academic Status <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Offer Status">Offer Status <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Ready for Offer Review Date">Ready Date <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Registration Status">Reg Status <i class="fa-solid fa-sort"></i></th>
+                                <th data-sort="Current Pipeline Stage">Pipeline Stage <i class="fa-solid fa-sort"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+                <div class="table-footer">
+                    <span id="resultCountText">Showing 0 of 0 records</span>
+                    <div class="pagination-controls">
+                        <button id="prevPageBtn" class="btn btn-secondary btn-sm" disabled><i class="fa-solid fa-chevron-left"></i> Previous</button>
+                        <span id="pageNumberDisplay">Page 1 of 1</span>
+                        <button id="nextPageBtn" class="btn btn-secondary btn-sm" disabled>Next <i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div id="detailDrawer" class="detail-drawer">
+            <div class="drawer-backdrop" id="drawerBackdrop"></div>
+            <div class="drawer-content">
+                <div class="drawer-header">
+                    <div class="drawer-title-area">
+                        <span class="drawer-serial-badge" id="drawerSerialBadge">AP260014</span>
+                        <h2 id="drawerTitle">Gazain Riaz</h2>
+                    </div>
+                    <button id="closeDrawerBtn" class="drawer-close" aria-label="Close detail panel">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div id="validationBanner" class="warning-banner hidden">
+                    <i class="fa-solid fa-triangle-exclamation banner-icon"></i>
+                    <div class="banner-text">
+                        <h5 id="bannerTitle">Validation Warning</h5>
+                        <p id="bannerMessage">Offer issue is blocked until applicant mobile and stated applicant email are both verified.</p>
+                    </div>
+                </div>
+
+                <nav class="drawer-tabs">
+                    <button class="tab-btn active" data-target="stage-sec-applicant">Applicant</button>
+                    <button class="tab-btn" data-target="stage-sec-verification">Verification</button>
+                    <button class="tab-btn" data-target="stage-sec-readiness">Readiness</button>
+                    <button class="tab-btn" data-target="stage-sec-decision">Offer Decision</button>
+                    <button class="tab-btn" data-target="stage-sec-engagement">Engagement</button>
+                    <button class="tab-btn" data-target="stage-sec-funding">Funding</button>
+                    <button class="tab-btn" data-target="stage-sec-registration">Registration</button>
+                    <button class="tab-btn" data-target="stage-sec-audit">Audit</button>
+                </nav>
+
+                <form id="editRecordForm" class="drawer-form-scroll">
+                    <div id="stage-sec-applicant" class="form-stage-section active">
+                        <h4 class="stage-section-heading">Applicant & Source Details</h4>
+                        <div class="fields-grid" id="grid-sec-applicant"></div>
+                    </div>
+                    <div id="stage-sec-verification" class="form-stage-section">
+                        <h4 class="stage-section-heading">Contact Verification</h4>
+                        <div class="fields-grid" id="grid-sec-verification"></div>
+                    </div>
+                    <div id="stage-sec-readiness" class="form-stage-section">
+                        <h4 class="stage-section-heading">Offer Readiness & Academics</h4>
+                        <div class="fields-grid" id="grid-sec-readiness"></div>
+                    </div>
+                    <div id="stage-sec-decision" class="form-stage-section">
+                        <h4 class="stage-section-heading">Offer Decision & Issue</h4>
+                        <div class="fields-grid" id="grid-sec-decision"></div>
+                    </div>
+                    <div id="stage-sec-engagement" class="form-stage-section">
+                        <h4 class="stage-section-heading">Conversion & Engagement</h4>
+                        <div class="fields-grid" id="grid-sec-engagement"></div>
+                    </div>
+                    <div id="stage-sec-funding" class="form-stage-section">
+                        <h4 class="stage-section-heading">Funding & Incentives</h4>
+                        <div class="fields-grid" id="grid-sec-funding"></div>
+                    </div>
+                    <div id="stage-sec-registration" class="form-stage-section">
+                        <h4 class="stage-section-heading">Registration Processing</h4>
+                        <div class="fields-grid" id="grid-sec-registration"></div>
+                    </div>
+                    <div id="stage-sec-audit" class="form-stage-section">
+                        <h4 class="stage-section-heading">Audit & System Logs</h4>
+                        <div class="fields-grid" id="grid-sec-audit"></div>
+                    </div>
+                </form>
+
+                <div class="drawer-actions">
+                    <button type="button" id="saveRecordBtn" class="btn btn-primary btn-lg"><i class="fa-solid fa-floppy-disk"></i> Save Record</button>
+                    <button type="button" id="deleteRecordBtn" class="btn btn-danger btn-lg"><i class="fa-solid fa-trash-can"></i> Delete</button>
+                    <button type="button" id="cancelDrawerBtn" class="btn btn-secondary btn-lg">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth-config.js"></script>
+    <script src="admissions_data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

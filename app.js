@@ -5,13 +5,16 @@ const LOCAL_STORAGE_KEY = 'eub_admissions_records';
 const THEME_STORAGE_KEY = 'eub_admissions_theme';
 const AUTH_STORAGE_KEY = 'eub_admissions_m365_account';
 const LOGIN_SCOPES = ['openid', 'profile', 'email'];
+const THEME_CLASSES = ['light-theme', 'dark-theme'];
 
 const AUTH_CONFIG = window.AUTH_CONFIG || {
     clientId: '',
     tenantId: 'common',
     redirectUri: window.location.origin + window.location.pathname,
     postLogoutRedirectUri: window.location.origin + window.location.pathname,
-    cacheLocation: 'localStorage'
+    cacheLocation: 'localStorage',
+    appPageUrl: new URL('admissions_db.html', window.location.href).toString(),
+    loginPageUrl: new URL('index.html', window.location.href).toString()
 };
 
 const msalConfig = {
@@ -56,11 +59,34 @@ const SECTION_MAPPING = {
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
-    initializeAuthFlow();
+    initializePage();
 });
 
-function initializeAuthFlow() {
+function initializePage() {
     loadTheme();
+
+    if (isLoginPage()) {
+        initializeLoginPage();
+        return;
+    }
+
+    initializeAdmissionsPage();
+}
+
+function isLoginPage() {
+    return document.body?.dataset.page === 'login' || !!document.getElementById('microsoftLoginBtn');
+}
+
+function getAppPageUrl() {
+    return AUTH_CONFIG.appPageUrl || new URL('admissions_db.html', window.location.href).toString();
+}
+
+function getLoginPageUrl() {
+    return AUTH_CONFIG.loginPageUrl || new URL('index.html', window.location.href).toString();
+}
+
+function initializeLoginPage() {
+    bindAuthButtons();
 
     if (!window.msal || !AUTH_CONFIG.clientId) {
         showAuthSetupMessage();
@@ -68,23 +94,24 @@ function initializeAuthFlow() {
     }
 
     msalInstance = new msal.PublicClientApplication(msalConfig);
-    handleAuthRedirect();
-    bindAuthButtons();
+    handleLoginPageRedirect();
 }
 
-async function handleAuthRedirect() {
+async function handleLoginPageRedirect() {
     try {
         const response = await msalInstance.handleRedirectPromise();
         if (response && response.account) {
             msalInstance.setActiveAccount(response.account);
-            finalizeSignIn(response.account);
+            persistAccount(response.account);
+            window.location.href = getAppPageUrl();
             return;
         }
 
         const activeAccount = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
         if (activeAccount) {
             msalInstance.setActiveAccount(activeAccount);
-            finalizeSignIn(activeAccount);
+            persistAccount(activeAccount);
+            window.location.href = getAppPageUrl();
             return;
         }
 
@@ -93,6 +120,40 @@ async function handleAuthRedirect() {
         console.error('Microsoft sign-in initialization failed', error);
         showAuthError('Microsoft sign-in could not be initialized. Check the tenant and client ID configuration.');
     }
+}
+
+async function initializeAdmissionsPage() {
+    if (!window.msal || !AUTH_CONFIG.clientId) {
+        window.location.href = getLoginPageUrl();
+        return;
+    }
+
+    msalInstance = new msal.PublicClientApplication(msalConfig);
+
+    try {
+        const response = await msalInstance.handleRedirectPromise();
+        if (response && response.account) {
+            msalInstance.setActiveAccount(response.account);
+        }
+    } catch (error) {
+        console.error('Microsoft redirect handling failed on app page', error);
+    }
+
+    const activeAccount = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    if (!activeAccount) {
+        window.location.href = getLoginPageUrl();
+        return;
+    }
+
+    msalInstance.setActiveAccount(activeAccount);
+    persistAccount(activeAccount);
+    document.body.classList.remove('auth-only');
+
+    loadRecords();
+    initFilterDropdowns();
+    renderFormFields();
+    setupEventListeners();
+    updateUI();
 }
 
 function bindAuthButtons() {
@@ -108,9 +169,17 @@ function bindAuthButtons() {
 }
 
 function showAuthScreen() {
-    document.getElementById('authScreen').classList.add('visible');
-    document.getElementById('appShell').classList.add('app-hidden');
-    document.getElementById('appShell').setAttribute('aria-hidden', 'true');
+    const authScreen = document.getElementById('authScreen');
+    if (authScreen) {
+        authScreen.classList.add('visible');
+    }
+
+    const appShell = document.getElementById('appShell');
+    if (appShell) {
+        appShell.classList.add('app-hidden');
+        appShell.setAttribute('aria-hidden', 'true');
+    }
+
     document.body.classList.add('auth-only');
 }
 
@@ -134,12 +203,7 @@ function showAuthError(message) {
     }
 }
 
-function finalizeSignIn(account) {
-    document.getElementById('authScreen').classList.remove('visible');
-    document.getElementById('appShell').classList.remove('app-hidden');
-    document.getElementById('appShell').setAttribute('aria-hidden', 'false');
-    document.body.classList.remove('auth-only');
-
+function persistAccount(account) {
     const status = document.getElementById('authStatusText');
     if (status) {
         status.textContent = `Signed in as ${account.name || account.username || 'Microsoft user'}.`;
@@ -150,12 +214,6 @@ function finalizeSignIn(account) {
         username: account.username || '',
         homeAccountId: account.homeAccountId || ''
     }));
-
-    loadRecords();
-    initFilterDropdowns();
-    renderFormFields();
-    setupEventListeners();
-    updateUI();
 }
 
 async function signInWithMicrosoft() {
@@ -183,7 +241,8 @@ async function signOutWithMicrosoft() {
     try {
         localStorage.removeItem(AUTH_STORAGE_KEY);
         await msalInstance.logoutRedirect({
-            account: msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0]
+            account: msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0],
+            postLogoutRedirectUri: getLoginPageUrl()
         });
     } catch (error) {
         console.error('Microsoft sign-out failed', error);
@@ -195,10 +254,15 @@ async function signOutWithMicrosoft() {
 function loadTheme() {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light-theme';
     state.theme = savedTheme;
-    document.body.className = savedTheme;
+    applyThemeClass(savedTheme);
     if (!localStorage.getItem(THEME_STORAGE_KEY)) {
         localStorage.setItem(THEME_STORAGE_KEY, savedTheme);
     }
+}
+
+function applyThemeClass(theme) {
+    document.body.classList.remove(...THEME_CLASSES);
+    document.body.classList.add(theme);
 }
 
 // Toggle Theme between dark and light
@@ -208,7 +272,7 @@ function toggleTheme() {
     } else {
         state.theme = 'dark-theme';
     }
-    document.body.className = state.theme;
+    applyThemeClass(state.theme);
     localStorage.setItem(THEME_STORAGE_KEY, state.theme);
 }
 

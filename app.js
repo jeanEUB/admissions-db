@@ -78,11 +78,32 @@ function isLoginPage() {
 }
 
 function getAppPageUrl() {
-    return AUTH_CONFIG.appPageUrl || new URL('admissions_db.html', window.location.href).toString();
+    return resolvePageUrl(AUTH_CONFIG.appPageUrl, 'admissions_db.html');
 }
 
 function getLoginPageUrl() {
-    return AUTH_CONFIG.loginPageUrl || new URL('index.html', window.location.href).toString();
+    return resolvePageUrl(AUTH_CONFIG.loginPageUrl, 'index.html');
+}
+
+function resolvePageUrl(configuredUrl, fallbackPage) {
+    const fallbackUrl = new URL(fallbackPage, window.location.href).toString();
+    if (!configuredUrl) {
+        return fallbackUrl;
+    }
+
+    try {
+        const parsed = new URL(configuredUrl, window.location.href);
+
+        // Guard against accidentally using github.com repo links instead of github.io site links.
+        if (parsed.hostname === 'github.com') {
+            return fallbackUrl;
+        }
+
+        return parsed.toString();
+    } catch (error) {
+        console.warn('Invalid configured page URL, using fallback.', error);
+        return fallbackUrl;
+    }
 }
 
 function initializeLoginPage() {
@@ -103,7 +124,7 @@ async function handleLoginPageRedirect() {
         if (response && response.account) {
             msalInstance.setActiveAccount(response.account);
             persistAccount(response.account);
-            window.location.href = getAppPageUrl();
+            window.location.replace(getAppPageUrl());
             return;
         }
 
@@ -111,7 +132,7 @@ async function handleLoginPageRedirect() {
         if (activeAccount) {
             msalInstance.setActiveAccount(activeAccount);
             persistAccount(activeAccount);
-            window.location.href = getAppPageUrl();
+            window.location.replace(getAppPageUrl());
             return;
         }
 
@@ -124,7 +145,7 @@ async function handleLoginPageRedirect() {
 
 async function initializeAdmissionsPage() {
     if (!window.msal || !AUTH_CONFIG.clientId) {
-        window.location.href = getLoginPageUrl();
+        window.location.replace(getLoginPageUrl());
         return;
     }
 
@@ -141,7 +162,7 @@ async function initializeAdmissionsPage() {
 
     const activeAccount = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
     if (!activeAccount) {
-        window.location.href = getLoginPageUrl();
+        window.location.replace(getLoginPageUrl());
         return;
     }
 

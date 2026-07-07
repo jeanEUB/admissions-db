@@ -2,10 +2,28 @@
 
 // Constants
 const LOCAL_STORAGE_KEY = 'eub_admissions_records';
+const SEED_VARIANT_STORAGE_KEY = 'eub_admissions_seed_variant';
 const THEME_STORAGE_KEY = 'eub_admissions_theme';
 const AUTH_STORAGE_KEY = 'eub_admissions_m365_account';
 const LOGIN_SCOPES = ['openid', 'profile', 'email'];
 const THEME_CLASSES = ['light-theme', 'dark-theme'];
+const CURRENT_SEED_VARIANT = 'v2';
+
+const NAME_POOLS = {
+    Female: ['Alya', 'Nora', 'Mariam', 'Sara', 'Zaina', 'Hala', 'Reem', 'Dana', 'Leen', 'Yara', 'Salma', 'Tala', 'Rana', 'Farah', 'Lina', 'Jana', 'Raghad', 'Maha'],
+    Male: ['Omar', 'Yousef', 'Zayd', 'Hasan', 'Kareem', 'Adel', 'Tariq', 'Rayyan', 'Faris', 'Hassan', 'Nasser', 'Jad', 'Samer', 'Bilal', 'Rami', 'Ibrahim', 'Saeed', 'Mazen'],
+    Neutral: ['Noor', 'Jordan', 'Ari', 'Mika', 'Sam', 'Taj', 'Robin', 'Nour', 'Aman', 'Sky']
+};
+
+const LAST_NAMES = ['Al Khalifa', 'Rahman', 'Al Mazrouei', 'Haddad', 'Qureshi', 'Al Mutairi', 'Farouq', 'Darwish', 'Najjar', 'Al Sabahi', 'Hamdan', 'Sharif', 'Mansoor', 'Abdulla', 'Kanaan', 'Bashir', 'Al Nuaimi', 'Saad', 'Hussain', 'Rizvi'];
+const SCHOOL_NAMES = ['Al Hekma College', 'Beacon International School', 'Crescent Sixth Form', 'New Dawn Academy', 'Bahrain Scholars School', 'Al Manar Secondary School', 'Peninsula Learning Centre', 'West Bay International Academy', 'Knowledge Bridge School', 'Al Rawabi Girls School', 'Future Path Institute', 'Ibn Rushd Secondary School', 'Capital Community School', 'Al Salam Private School', 'North Gate Academy', 'Horizon Science College'];
+const GRADE_SUMMARIES = ['Overall 68% with stronger humanities scores', 'Overall 74% with a B in mathematics', 'Predicted ABB at A Level', 'IB predicted 29 points with HL English 5', 'American diploma GPA 3.1 / 4.0', 'Overall 81% with distinction in business', 'BTEC profile DMM with solid coursework', 'High school average 77% with improved final term', 'Overall 84% and strong interview notes', 'Predicted 72% equivalent with good attendance', 'Foundation average 3.3 GPA equivalent', 'Overall 69% with resit pending in one subject'];
+const NOTE_VARIATIONS = ['Needs a second follow-up after the initial enquiry call.', 'Applicant asked for a family cost breakdown before progressing.', 'Interested in campus life and student support services.', 'Requested evening outreach because daytime calls are missed.', 'Counsellor noted strong motivation but slower document turnaround.', 'Family prefers updates by email before any phone follow-up.', 'Applicant is comparing offers from two regional universities.', 'Guardian requested a clearer explanation of progression routes.', 'Good engagement so far; waiting on one remaining attachment.', 'Student asked for examples of internship and placement outcomes.', 'Prefers short WhatsApp updates rather than long call summaries.', 'Needs help understanding the difference between entry pathways.'];
+const RELATIONSHIP_NAMES = {
+    Father: ['Khalid', 'Omar', 'Hussain', 'Tariq', 'Nabil', 'Sami', 'Faisal', 'Majid'],
+    Mother: ['Aisha', 'Layla', 'Huda', 'Mona', 'Rania', 'Samira', 'Nadia', 'Iman'],
+    Guardian: ['Amal', 'Rashid', 'Muna', 'Adnan', 'Salwa', 'Bassam', 'Hanan', 'Wael']
+};
 
 const AUTH_CONFIG = window.AUTH_CONFIG || {
     clientId: '',
@@ -307,19 +325,104 @@ function syncThemeSwitch(theme) {
     }
 }
 
+function getNamePool(gender) {
+    if (gender === 'Female') return NAME_POOLS.Female;
+    if (gender === 'Male') return NAME_POOLS.Male;
+    return NAME_POOLS.Neutral;
+}
+
+function slugifyNamePart(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '.')
+        .replace(/^\.+|\.+$/g, '');
+}
+
+function createPhoneNumber(prefix, index, offset) {
+    const suffix = String(((index + 1) * 137 + offset * 911) % 1000000).padStart(6, '0');
+    return `${prefix}${suffix}`;
+}
+
+function looksLikeLegacySeed(records) {
+    if (!Array.isArray(records) || records.length === 0) {
+        return false;
+    }
+
+    const sample = records.slice(0, Math.min(24, records.length));
+    const uniqueStudentMobiles = new Set(sample.map(record => record['Mobile No.1'])).size;
+    const uniqueGuardianMobiles = new Set(sample.map(record => record['Parent / Guardian Mobile'])).size;
+    const hasLegacyEmailDomain = sample.every(record => String(record['Email Address'] || '').includes('@fictional-applicants.edu'));
+
+    return hasLegacyEmailDomain && uniqueStudentMobiles <= 2 && uniqueGuardianMobiles <= 2;
+}
+
+function diversifySeedRecord(record, index) {
+    const namePool = getNamePool(record['Gender']);
+    const firstName = namePool[index % namePool.length];
+    const lastName = LAST_NAMES[Math.floor(index / namePool.length) % LAST_NAMES.length];
+    const relationship = record['Parent / Guardian Relationship'];
+    const guardianPool = RELATIONSHIP_NAMES[relationship] || RELATIONSHIP_NAMES.Guardian;
+    const guardianFirstName = guardianPool[(index * 3) % guardianPool.length];
+    const schoolName = SCHOOL_NAMES[(index * 5) % SCHOOL_NAMES.length];
+    const grades = GRADE_SUMMARIES[(index * 7) % GRADE_SUMMARIES.length];
+    const note = NOTE_VARIATIONS[(index * 11) % NOTE_VARIATIONS.length];
+    const applicantSlug = `${slugifyNamePart(firstName)}.${slugifyNamePart(lastName)}`;
+    const guardianSlug = `${slugifyNamePart(guardianFirstName)}.${slugifyNamePart(lastName)}`;
+    const serialDigits = String(record['App Serial No.'] || '').replace(/\D/g, '').slice(-4) || String(index + 1).padStart(4, '0');
+
+    return {
+        ...record,
+        'First Name': firstName,
+        'Last Name': lastName,
+        'Mobile No.1': createPhoneNumber('9733', index, 17),
+        'Email Address': `${applicantSlug}${serialDigits}@applicants.example`,
+        'Parent / Guardian Name': `${guardianFirstName} ${lastName}`,
+        'Parent / Guardian Mobile': createPhoneNumber('9736', index, 29),
+        'Parent / Guardian Email': `${guardianSlug}${serialDigits}@familymail.example`,
+        'School Name or Awarding Body': schoolName,
+        'Existing / Predicted Grades': grades,
+        'Exception Notes': note
+    };
+}
+
+function buildDiversifiedSeed(records) {
+    return records.map((record, index) => diversifySeedRecord(record, index));
+}
+
 // Load records from local storage or fallback to spreadsheet data
 function loadRecords() {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const storedSeedVariant = localStorage.getItem(SEED_VARIANT_STORAGE_KEY);
+    let shouldPersist = false;
+
     if (stored) {
         try {
             state.records = JSON.parse(stored);
         } catch (e) {
             console.error("Error parsing stored records, resetting to seed data", e);
-            state.records = [...ADMISSIONS_DATA.records];
+            state.records = buildDiversifiedSeed(ADMISSIONS_DATA.records);
+            shouldPersist = true;
         }
     } else {
-        state.records = [...ADMISSIONS_DATA.records];
+        state.records = buildDiversifiedSeed(ADMISSIONS_DATA.records);
+        shouldPersist = true;
     }
+
+    if (!Array.isArray(state.records)) {
+        state.records = buildDiversifiedSeed(ADMISSIONS_DATA.records);
+        shouldPersist = true;
+    }
+
+    if (storedSeedVariant !== CURRENT_SEED_VARIANT && looksLikeLegacySeed(state.records)) {
+        state.records = buildDiversifiedSeed(state.records);
+        shouldPersist = true;
+    }
+
+    if (shouldPersist) {
+        localStorage.setItem(SEED_VARIANT_STORAGE_KEY, CURRENT_SEED_VARIANT);
+        saveRecords();
+    }
+
     state.filteredRecords = [...state.records];
 }
 
@@ -1062,6 +1165,7 @@ function setupEventListeners() {
     document.getElementById('resetDataBtn').addEventListener('click', () => {
         if (confirm("Are you sure you want to reset the admissions database to its original Excel state? All your custom modifications will be lost.")) {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
+            localStorage.removeItem(SEED_VARIANT_STORAGE_KEY);
             loadRecords();
             updateUI();
         }

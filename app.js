@@ -7,7 +7,7 @@ const THEME_STORAGE_KEY = 'eub_admissions_theme';
 const AUTH_STORAGE_KEY = 'eub_admissions_m365_account';
 const LOGIN_SCOPES = ['openid', 'profile', 'email'];
 const THEME_CLASSES = ['light-theme', 'dark-theme'];
-const CURRENT_SEED_VARIANT = 'v2';
+const CURRENT_SEED_VARIANT = 'v3';
 
 const NAME_POOLS = {
     Female: ['Alya', 'Nora', 'Mariam', 'Sara', 'Zaina', 'Hala', 'Reem', 'Dana', 'Leen', 'Yara', 'Salma', 'Tala', 'Rana', 'Farah', 'Lina', 'Jana', 'Raghad', 'Maha'],
@@ -60,7 +60,8 @@ let state = {
     sortColumn: 'App Serial No.',
     sortOrder: 'desc', // desc to show newest Serial Numbers first
     currentRecordId: null, // Holds the Serial No of editing record, null for new record
-    theme: 'light-theme'
+    theme: 'light-theme',
+    dashboardFilter: null
 };
 
 // Section mapping from metadata groups to HTML element IDs
@@ -385,8 +386,127 @@ function diversifySeedRecord(record, index) {
     };
 }
 
+function getStageWeight(stage) {
+    if (stage === 'Applicant Data Incomplete') return 1.3;
+    if (stage === 'Contact Verification') return 1.25;
+    if (stage === 'Contact Verification Dormant') return 0.75;
+    if (stage === 'Offer Readiness') return 1.05;
+    if (stage === 'Offer In Process') return 1.1;
+    if (stage === 'Conditional Offer Issued') return 0.95;
+    if (stage === 'Unconditional Offer Issued') return 0.9;
+    if (stage === 'Conversion') return 0.9;
+    if (stage === 'Registration In Process') return 0.85;
+    if (stage === 'Registered') return 0.8;
+    if (stage === 'Withdrawn') return 0.45;
+    if (stage === 'Rejected') return 0.4;
+    if (stage === 'Duplicate / Invalid') return 0.35;
+    return 0.65;
+}
+
+function buildRandomStageAssignments(recordCount, stages) {
+    if (!recordCount || !Array.isArray(stages) || stages.length === 0) {
+        return [];
+    }
+
+    const counts = new Array(stages.length).fill(0);
+    let remaining = recordCount;
+
+    if (recordCount >= stages.length) {
+        for (let i = 0; i < stages.length; i++) {
+            counts[i] = 1;
+            remaining--;
+        }
+    }
+
+    const weighted = stages.map(stage => {
+        const variance = 0.75 + Math.random() * 0.85;
+        return Math.max(0.1, getStageWeight(stage) * variance);
+    });
+    const totalWeight = weighted.reduce((sum, value) => sum + value, 0);
+
+    const fractions = weighted.map((weight, idx) => {
+        const exact = totalWeight > 0 ? (weight / totalWeight) * remaining : 0;
+        const chunk = Math.floor(exact);
+        counts[idx] += chunk;
+        return exact - chunk;
+    });
+
+    let assigned = counts.reduce((sum, value) => sum + value, 0);
+    while (assigned < recordCount) {
+        const randomBump = Math.random() * 0.2;
+        let target = 0;
+        let bestScore = -1;
+
+        fractions.forEach((fraction, idx) => {
+            const score = fraction + (idx === target ? 0 : randomBump * Math.random());
+            if (score > bestScore) {
+                bestScore = score;
+                target = idx;
+            }
+        });
+
+        counts[target] += 1;
+        assigned += 1;
+    }
+
+    const assignments = [];
+    counts.forEach((count, idx) => {
+        for (let i = 0; i < count; i++) {
+            assignments.push(stages[idx]);
+        }
+    });
+
+    for (let i = assignments.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [assignments[i], assignments[j]] = [assignments[j], assignments[i]];
+    }
+
+    return assignments;
+}
+
+function applyStageDataProfile(record, stage, index) {
+    const isLateStage = stage === 'Offer In Process' || stage === 'Conditional Offer Issued' || stage === 'Unconditional Offer Issued' || stage === 'Conversion' || stage === 'Registration In Process' || stage === 'Registered';
+    const hasFullVerification = stage === 'Registered' || stage === 'Registration In Process' || stage === 'Unconditional Offer Issued' || (isLateStage && Math.random() > 0.12);
+    const isOfferConditional = stage === 'Conditional Offer Issued';
+    const isOfferUnconditional = stage === 'Unconditional Offer Issued' || stage === 'Registered';
+
+    const mobileStatus = hasFullVerification ? 'Verified' : (stage === 'Applicant Data Incomplete' ? 'Attempted' : (Math.random() > 0.45 ? 'Verified' : 'Attempted'));
+    const emailStatus = hasFullVerification ? 'Verified' : (stage === 'Applicant Data Incomplete' ? 'Verification Email Sent' : (Math.random() > 0.4 ? 'Verified' : 'Verification Email Sent'));
+
+    let offerStatus = 'In Process';
+    if (isOfferConditional) offerStatus = 'Conditional';
+    if (isOfferUnconditional) offerStatus = 'Unconditional';
+    if (stage === 'Rejected') offerStatus = 'Rejected';
+
+    let registrationStatus = 'Not Started';
+    if (stage === 'Unconditional Offer Issued') registrationStatus = 'Ready for Registration';
+    if (stage === 'Registration In Process') registrationStatus = 'Registration In Process';
+    if (stage === 'Registered') registrationStatus = 'Registered';
+
+    const verificationBlocked = mobileStatus !== 'Verified' || emailStatus !== 'Verified';
+
+    return {
+        ...record,
+        'Current Pipeline Stage': stage,
+        'Mobile Verification Status': mobileStatus,
+        'Email Verification Status': emailStatus,
+        'Contact Verification Gate': verificationBlocked ? 'Not Passed' : 'Passed',
+        'Verification Blocker': verificationBlocked ? 'Missing Email or Mobile Verification' : '',
+        'Offer Status': offerStatus,
+        'Registration Status': registrationStatus,
+        'Student ID': registrationStatus === 'Registered' ? `STU${String(260000 + index + 1)}` : ''
+    };
+}
+
 function buildDiversifiedSeed(records) {
-    return records.map((record, index) => diversifySeedRecord(record, index));
+    const pipelineStages = (ADMISSIONS_DATA.dropdowns['Current Pipeline Stage'] || []).filter(Boolean);
+    const stageAssignments = buildRandomStageAssignments(records.length, pipelineStages);
+
+    return records.map((record, index) => {
+        const diversified = diversifySeedRecord(record, index);
+        const stage = stageAssignments[index] || diversified['Current Pipeline Stage'] || 'Applicant Data Incomplete';
+        return applyStageDataProfile(diversified, stage, index);
+    });
 }
 
 // Load records from local storage or fallback to spreadsheet data
@@ -545,10 +665,112 @@ function renderFormFields() {
 
 // Update the entire UI elements (KPIs, Charts, Table rows)
 function updateUI() {
+    updateDashboardActiveStates();
     calculateKPIs();
     renderCharts();
     filterAndSortRecords();
     renderTable();
+}
+
+function setDashboardFilter(filter) {
+    const isSameFilter = state.dashboardFilter && filter &&
+        state.dashboardFilter.type === filter.type &&
+        state.dashboardFilter.value === filter.value;
+
+    if (!isSameFilter) {
+        const searchInput = document.getElementById('searchInput');
+        const filterStage = document.getElementById('filterStage');
+        const filterAdvisor = document.getElementById('filterAdvisor');
+        const filterOffer = document.getElementById('filterOffer');
+        const filterVerification = document.getElementById('filterVerification');
+
+        if (searchInput) searchInput.value = '';
+        if (filterStage) filterStage.value = '';
+        if (filterAdvisor) filterAdvisor.value = '';
+        if (filterOffer) filterOffer.value = '';
+        if (filterVerification) filterVerification.value = '';
+    }
+
+    state.dashboardFilter = isSameFilter ? null : filter;
+    state.currentPage = 1;
+    updateUI();
+}
+
+function matchesDashboardFilter(record) {
+    if (!state.dashboardFilter) {
+        return true;
+    }
+
+    if (state.dashboardFilter.type === 'kpi-total') {
+        return true;
+    }
+
+    if (state.dashboardFilter.type === 'kpi-verified') {
+        return record['Mobile Verification Status'] === 'Verified' && record['Email Verification Status'] === 'Verified';
+    }
+
+    if (state.dashboardFilter.type === 'kpi-offers') {
+        return record['Offer Status'] === 'Conditional' || record['Offer Status'] === 'Unconditional';
+    }
+
+    if (state.dashboardFilter.type === 'kpi-registered') {
+        return record['Registration Status'] === 'Registered';
+    }
+
+    if (state.dashboardFilter.type === 'stage') {
+        return record['Current Pipeline Stage'] === state.dashboardFilter.value;
+    }
+
+    if (state.dashboardFilter.type === 'advisor') {
+        return record['Advisor / Admissions Owner'] === state.dashboardFilter.value;
+    }
+
+    return true;
+}
+
+function updateDashboardActiveStates() {
+    document.querySelectorAll('.dashboard-clickable').forEach(el => {
+        el.classList.remove('dashboard-active');
+    });
+
+    if (!state.dashboardFilter) {
+        return;
+    }
+
+    if (state.dashboardFilter.type.startsWith('kpi-')) {
+        const card = document.querySelector(`.kpi-card[data-dashboard-key="${state.dashboardFilter.type}"]`);
+        if (card) {
+            card.classList.add('dashboard-active');
+        }
+    }
+}
+
+function bindDashboardClickTargets() {
+    const cardBindings = [
+        { selector: '.kpi-total', key: 'kpi-total' },
+        { selector: '.kpi-verified', key: 'kpi-verified' },
+        { selector: '.kpi-offers', key: 'kpi-offers' },
+        { selector: '.kpi-registered', key: 'kpi-registered' }
+    ];
+
+    cardBindings.forEach(binding => {
+        const card = document.querySelector(binding.selector);
+        if (!card) return;
+
+        card.classList.add('dashboard-clickable');
+        card.dataset.dashboardKey = binding.key;
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('title', 'Click to filter records in the table');
+
+        card.addEventListener('click', () => setDashboardFilter({ type: binding.key }));
+        card.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setDashboardFilter({ type: binding.key });
+            }
+        });
+    });
 }
 
 // Compute dashboard statistics dynamically
@@ -625,6 +847,23 @@ function renderCharts() {
 
         const col = document.createElement('div');
         col.className = 'chart-bar-col';
+        col.classList.add('dashboard-clickable');
+        col.setAttribute('role', 'button');
+        col.setAttribute('tabindex', '0');
+        col.setAttribute('title', `Filter table by ${stage}`);
+        col.dataset.stage = stage;
+
+        if (state.dashboardFilter?.type === 'stage' && state.dashboardFilter.value === stage) {
+            col.classList.add('dashboard-active');
+        }
+
+        col.addEventListener('click', () => setDashboardFilter({ type: 'stage', value: stage }));
+        col.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setDashboardFilter({ type: 'stage', value: stage });
+            }
+        });
         
         const bar = document.createElement('div');
         bar.className = 'chart-bar-fill';
@@ -666,8 +905,24 @@ function renderCharts() {
         const pct = (count / maxAdvisorCount) * 100;
         
         const row = document.createElement('div');
+        row.className = 'advisor-chart-row dashboard-clickable';
         row.style.width = '100%';
         row.style.marginBottom = '0.5rem';
+        row.setAttribute('role', 'button');
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('title', `Filter table by advisor ${adv}`);
+
+        if (state.dashboardFilter?.type === 'advisor' && state.dashboardFilter.value === adv) {
+            row.classList.add('dashboard-active');
+        }
+
+        row.addEventListener('click', () => setDashboardFilter({ type: 'advisor', value: adv }));
+        row.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setDashboardFilter({ type: 'advisor', value: adv });
+            }
+        });
         
         const info = document.createElement('div');
         info.style.display = 'flex';
@@ -735,7 +990,9 @@ function filterAndSortRecords() {
                 r['Email Verification Status'] === 'Verified';
         }
 
-        return searchMatches && stageMatches && advisorMatches && offerMatches && verificationMatches;
+        const dashboardMatches = matchesDashboardFilter(r);
+
+        return searchMatches && stageMatches && advisorMatches && offerMatches && verificationMatches && dashboardMatches;
     });
 
     // Sort records
@@ -1081,6 +1338,8 @@ function closeDrawer() {
 
 // Wire events
 function setupEventListeners() {
+    bindDashboardClickTargets();
+
     // Text search
     document.getElementById('searchInput').addEventListener('input', () => {
         state.currentPage = 1;
@@ -1103,6 +1362,7 @@ function setupEventListeners() {
         document.getElementById('filterAdvisor').value = "";
         document.getElementById('filterOffer').value = "";
         document.getElementById('filterVerification').value = "";
+        state.dashboardFilter = null;
         state.currentPage = 1;
         updateUI();
     });

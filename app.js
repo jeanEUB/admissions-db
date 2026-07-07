@@ -173,6 +173,7 @@ async function initializeAdmissionsPage() {
     loadRecords();
     initFilterDropdowns();
     renderFormFields();
+    bindAuthButtons();
     setupEventListeners();
     updateUI();
 }

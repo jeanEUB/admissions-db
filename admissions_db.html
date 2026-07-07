@@ -32,10 +32,14 @@
                 <button id="resetDataBtn" class="btn btn-danger" title="Reset to original spreadsheet records">
                     <i class="fa-solid fa-rotate-left"></i> Reset Seed
                 </button>
-                <button id="themeToggleBtn" class="btn btn-icon" title="Toggle Light/Dark Theme">
-                    <i class="fa-solid fa-sun icon-sun"></i>
-                    <i class="fa-solid fa-moon icon-moon"></i>
-                </button>
+                <div class="theme-switch" title="Switch between light and dark theme">
+                    <span class="theme-switch-label">Light</span>
+                    <label class="theme-toggle" for="themeToggleSwitch">
+                        <input type="checkbox" id="themeToggleSwitch" aria-label="Toggle light and dark theme">
+                        <span class="theme-toggle-slider"></span>
+                    </label>
+                    <span class="theme-switch-label">Dark</span>
+                </div>
                 <button id="signOutBtn" class="btn btn-secondary" title="Sign out of Microsoft 365">
                     <i class="fa-solid fa-right-from-bracket"></i> Sign Out
                 </button>

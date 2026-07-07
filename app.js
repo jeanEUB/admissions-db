@@ -277,6 +277,7 @@ function loadTheme() {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light-theme';
     state.theme = savedTheme;
     applyThemeClass(savedTheme);
+    syncThemeSwitch(savedTheme);
     if (!localStorage.getItem(THEME_STORAGE_KEY)) {
         localStorage.setItem(THEME_STORAGE_KEY, savedTheme);
     }
@@ -295,7 +296,15 @@ function toggleTheme() {
         state.theme = 'dark-theme';
     }
     applyThemeClass(state.theme);
+    syncThemeSwitch(state.theme);
     localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+}
+
+function syncThemeSwitch(theme) {
+    const switchEl = document.getElementById('themeToggleSwitch');
+    if (switchEl) {
+        switchEl.checked = theme === 'dark-theme';
+    }
 }
 
 // Load records from local storage or fallback to spreadsheet data
@@ -1036,8 +1045,15 @@ function setupEventListeners() {
         });
     });
 
-    // Theme Toggle
-    document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+    // Theme Toggle Switch
+    const themeSwitch = document.getElementById('themeToggleSwitch');
+    if (themeSwitch) {
+        themeSwitch.addEventListener('change', () => {
+            state.theme = themeSwitch.checked ? 'dark-theme' : 'light-theme';
+            applyThemeClass(state.theme);
+            localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+        });
+    }
 
     // Export JSON
     document.getElementById('exportJsonBtn').addEventListener('click', exportDatabaseToJson);

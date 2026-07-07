@@ -312,27 +312,71 @@ h1, h2, h3, h4, h5, h6 {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
-.btn-icon {
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
-    border-radius: 50%;
+.theme-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.25rem 0.35rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
     background-color: var(--bg-card);
-    border-color: var(--border-color);
-    color: var(--text-primary);
-}
-.btn-icon:hover {
-    background-color: var(--border-color);
 }
 
-/* Toggle Sun/Moon details */
-.app-header .icon-moon,
-.light-theme .icon-sun {
-    display: none;
+.theme-switch-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
 }
-.light-theme .icon-moon,
-.app-header .icon-sun {
-    display: block;
+
+.theme-toggle {
+    position: relative;
+    width: 46px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.theme-toggle input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.theme-toggle-slider {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: linear-gradient(135deg, hsl(210, 20%, 82%), hsl(210, 16%, 72%));
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.theme-toggle-slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: #fff;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease;
+}
+
+.theme-toggle input:checked + .theme-toggle-slider {
+    background: linear-gradient(135deg, hsl(222, 30%, 38%), hsl(222, 35%, 26%));
+}
+
+.theme-toggle input:checked + .theme-toggle-slider::before {
+    transform: translateX(22px);
+}
+
+.theme-toggle input:focus-visible + .theme-toggle-slider {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 /* Dashboard Section */
